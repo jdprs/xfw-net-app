@@ -8,3 +8,5 @@ android/local.properties
 .DS_Store
 .idea/
 *.iml
+*.keystore
+*.jks
