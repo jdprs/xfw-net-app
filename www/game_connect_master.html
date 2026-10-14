@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>小富翁股票投资游戏 v10.0 · 等待玩家</title>
+    <script>window.GAME_MODE='master';</script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        (function(){
+            var peerjsUrls = [
+                'https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js',
+                'https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js',
+                'https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.4/peerjs.min.js'
+            ];
+            function loadPeerJS(i) {
+                if (i >= peerjsUrls.length) { console.error('all PeerJS CDN failed'); return; }
+                var s = document.createElement('script');
+                s.src = peerjsUrls[i];
+                s.onload = function() { console.log('PeerJS loaded from: ' + peerjsUrls[i]); };
+                s.onerror = function() { console.warn('PeerJS CDN failed: ' + peerjsUrls[i] + ', trying next...'); loadPeerJS(i + 1); };
+                document.head.appendChild(s);
+            }
+            loadPeerJS(0);
+        })();
+    </script>
+    <link rel="stylesheet" href="assets/css/style.css?v=10.1" />
+    <link rel="icon" href="favicon.ico" type="image/x-icon">
+</head>
+<body>
+    <div class="net-status-bar">
+        <span class="net-status-dot connecting" id="net-status-dot"></span>
+        <span id="net-status-text">连接中…</span>
+        <span class="net-status-room">🏠 房主</span>
+        <button class="btn btn-warning btn-sm net-home-btn" id="net-home-btn" onclick="window.xfwReturnHome()">🏠 返回大厅</button>
+    </div>
+    <div class="container">
+        <header>
+            <h1 id="main-title">🏆 小富翁股票投资游戏 v10.0</h1>
+            <p class="subtitle">A股 · B股 · C股 · D股 · 自建股 · 彩票 · 外接AI · 成就 · 决策机制</p>
+            <p class="subtitle" style="font-size:0.8rem;">✨ 整元交易 · 总资产奖励 · 盈亏显示 · 外接AI全信息 ✨</p>
+            <p class="subtitle" style="font-size:0.8rem;">总资产低于阈值即破产 · v9.1 收盘统一破产检测 + 资助金</p>
+        </header>
+        <div id="banner-container"></div>
+        <div id="save-notification" class="save-notification">✅ 已保存</div>
+        <div id="runtime-config" hidden>
+            <input type="number" id="human-players" value="1" />
+            <input type="number" id="ai-players" value="0" />
+            <input type="number" id="total-rounds" value="60" />
+            <input type="number" id="admin-banner-duration" value="4" />
+            <input type="number" id="admin-ai-think-min" value="4" />
+            <input type="number" id="admin-ai-think-max" value="8" />
+            <select id="admin-chart-type"><option value="line">line</option></select>
+            <input type="number" id="admin-darkhorse-multiplier" value="2.0" />
+            <input type="number" id="admin-darkhorse-prob" value="0.35" />
+            <input type="number" id="admin-share-price" value="100" />
+            <input type="number" id="admin-bankruptcy-threshold" value="100" />
+            <input type="number" id="admin-bankruptcy-fund" value="1000" />
+        </div>
+        <div id="game-main" style="display:none;">
+            <div class="game-info">
+                <div class="info-item"><h3>🏦 银行资产</h3><div class="info-value" id="bank-assets">¥200,000</div><p id="bank-warning" class="bank-warning">⚠️ 银行告急！掠夺模式激活</p></div>
+                <div class="info-item"><h3>📅 当前轮数</h3><div class="info-value" id="current-round">1 / 60</div></div>
+                <div class="info-item"><h3>📈 市场概况</h3><p>A股 <span id="stock-a-status">正常</span></p><p>B股 <span id="stock-b-status">正常</span></p><p>C股 <span id="stock-c-status">正常</span></p><p>D股 <span id="stock-d-status">正常</span></p><div id="custom-stock-status" style="font-size:0.75rem;"></div><div id="dark-horse-display" style="font-size:0.75rem;color:var(--dark-horse-color);margin-top:2px;"></div></div>
+            </div>
+            <div class="leaderboard"><div class="section-header"><div class="section-title">🏆 实时排行榜</div></div><div id="leaderboard-content"></div></div>
+            <div class="round-info"><div class="round-number" id="round-display">第 1 轮</div><p style="font-size:0.85rem;">点击「决策」开始操作，完成后点击「完成」</p><div class="hundred-rule">💰 所有金额以元为单位（整数）</div><div class="decision-progress" id="decision-progress">📊 决策进度：<span class="highlight" id="decision-count">0/0</span> 已完成</div></div>
+            <div class="players-container" id="players-container"></div>
+            <div class="game-controls" style="display:flex; gap:8px; flex-wrap:wrap; justify-content:center; margin-bottom:16px;">
+                <button class="btn btn-success" id="close-market-btn" disabled>📊 收盘</button>
+                <button class="btn btn-danger" id="end-game-btn" disabled>⏹ 直接结束游戏</button>
+                <button class="btn btn-warning" id="save-game-btn">💾 保存</button>
+                <button class="btn btn-gold" id="export-code-btn">📋 导出存档码</button>
+                <button class="btn btn-gold" id="import-code-btn">📥 导入存档码</button>
+                <button class="btn btn-primary btn-sm" id="history-btn">📜 历史记录</button>
+                <button class="btn btn-outline" id="new-game-btn">🔄 新游戏</button>
+                <button class="btn btn-primary btn-sm" id="help-btn">❓ 帮助</button>
+            </div>
+            <div class="charts-container"><div class="chart-card"><div class="section-header"><div class="section-title">📈 资产趋势</div></div><canvas id="assets-chart"></canvas></div><div class="chart-card"><div class="section-header"><div class="section-title">📉 股票涨跌</div></div><canvas id="stocks-chart"></canvas></div></div>
+            <div class="expand-charts-row"><button class="btn btn-gold btn-sm" id="expand-charts-btn">📊 展开图表 · 查看每个玩家/股票的涨跌图</button></div>
+        </div>
+        <div class="game-history hidden" id="game-history"><div class="section-header"><div class="section-title">📜 游戏日志</div><div style="display:flex; gap:4px;"><button class="toggle-panel-btn" id="toggle-panel-btn" title="折叠/展开">➖</button><button class="btn btn-primary btn-sm" id="toggle-logs">展开/收起</button></div></div><div class="history-log" id="history-log"><div class="log-entry">🎮 游戏准备就绪</div></div></div>
+        <button id="show-log-btn" style="display: none;">📜 展开日志</button>
+        <div class="modal-overlay" id="eai-overlay"><div class="eai-modal-box"><div class="panel-header"><h3 id="eai-panel-title">🌐 外接AI 指令面板</h3><button class="panel-close" id="eai-panel-close">×</button></div><div class="eai-body"><div class="eai-tabs"><button class="active" data-tab="prompt">📋 指令代码</button><button data-tab="response">📥 粘贴回复</button></div><div class="eai-content"><div id="eai-tab-prompt"><div class="eai-prompt-box" id="eai-prompt-box">正在生成指令...</div></div><div id="eai-tab-response" style="display:none;"><textarea id="eai-response-text" placeholder="粘贴外部AI的回复（JSON格式）..." rows="6"></textarea></div></div><div class="eai-toolbar"><button class="btn-sm btn-sm-cyan" id="eai-copy-prompt">📋 复制指令</button><span class="hint">复制到外部AI，将回复粘贴到右侧</span></div><div class="eai-actions"><button class="btn btn-success btn-sm" id="eai-execute-response">⚡ 执行决策</button><button class="btn btn-warning btn-sm" id="eai-clear-response">清空</button><button class="btn btn-primary btn-sm" id="eai-panel-close-btn">关闭面板</button></div></div></div>
+        <div class="achievement-modal" id="achievement-modal"><div class="achievement-content"><h2>🏅 成就馆</h2><div class="achievement-stats" id="achievement-stats">已解锁 0 / 9 个成就</div><div class="achievement-grid" id="achievement-grid"></div><button class="achievement-close-btn" id="achievement-close-btn">关闭</button></div></div>
+        <div class="version">基氮实验室 版权所有 · v10.0</div>
+        <div class="version" id="history-version" title="点击查看历史提交">📜 历史版本</div>
+        <div id="mp-lobby-root" style="display:none;"></div>
+    </div>
+    <div class="results-modal" id="results-modal"><div class="results-content"><h2>🎉 游戏结束</h2><div id="winner-message"></div><div id="ranking-list"></div><button class="btn btn-gold" id="restart-btn" style="margin-top:14px;width:100%;">🔄 重新开始</button></div></div>
+    <div class="event-modal" id="event-modal"><div class="event-content"><div class="event-icon" id="event-icon">📢</div><div class="event-title" id="event-title">事件</div><div class="event-description" id="event-description">描述</div><button class="btn btn-primary" id="event-close-btn">确定</button></div></div>
+    <div class="modal-overlay" id="info-modal"><div class="modal-box"><h3 id="info-modal-title">📢 信息</h3><div class="modal-body" id="info-modal-body"></div><div class="modal-actions"><button class="btn btn-primary" id="info-modal-ok">确定</button></div></div></div>
+    <div class="help-modal" id="help-modal"><div class="help-content" id="help-content-body"></div></div>
+    <div class="code-modal" id="code-modal"><div class="code-modal-content"><h3 id="code-modal-title">📋 存档码</h3><textarea id="code-textarea" rows="4" placeholder="存档码..."></textarea><div class="btn-row"><button class="btn btn-primary btn-sm" id="code-copy-btn">📋 复制</button><button class="btn btn-success btn-sm" id="code-import-confirm-btn" style="display:none;">📥 导入</button><button class="btn btn-warning btn-sm" id="code-close-btn">关闭</button></div></div></div>
+    <div class="history-modal" id="history-modal"><div class="history-content"><div class="section-header"><div class="section-title">📜 历史记录</div><button class="btn btn-warning btn-sm" id="history-close-btn">关闭</button></div><div id="history-summary" class="history-summary"></div><div id="history-list" class="history-list"></div></div></div>
+    <div class="expand-overlay" id="expand-overlay"><div class="expand-content"><div class="section-header"><div class="section-title">📊 图表总览</div><div style="display:flex; gap:6px; flex-wrap:wrap;"><button class="btn btn-primary btn-sm expand-tab active" data-tab="players">👤 玩家涨跌</button><button class="btn btn-primary btn-sm expand-tab" data-tab="stocks">📈 股票涨跌</button><button class="btn btn-warning btn-sm" id="expand-close-btn">✕ 关闭</button></div></div><div class="expand-grid" id="expand-grid"></div></div></div>
+    <script src="src/main.js?v=10.1"></script>
+</body>
+</html>

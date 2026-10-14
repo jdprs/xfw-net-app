@@ -1,0 +1,507 @@
+//  31. 所有事件绑定
+        // ================================================================
+
+        let closeMarketBtn, newGameBtn, startGameBtn, loadSaveBtn, saveGameBtn, restartBtn;
+        let helpBtn, helpBtnSetup, helpCloseBtn, helpCopyBtn, toggleLogsBtn, togglePanelBtn;
+        let exportCodeBtn, importCodeBtn, codeCloseBtn, codeCopyBtn, codeShareBtn, codeImportConfirm;
+        let achievementCloseBtn, endGameBtn;
+
+        window.onload = function() {
+            const $id = (id) => document.getElementById(id);
+
+            // ---- 健康忠告（仅大厅页显示，游戏内页面不重复弹出） ----
+            if (!window.GAME_MODE) {
+                showHealthModal();
+            }
+
+            // ---- 外接AI配置（仅存在配置容器的页面，如大厅/单机设置页） ----
+            if ($id('external-ai-list')) {
+                renderExternalAIConfigs();
+            }
+
+            // ---- 高级设置UI（仅设置页存在） ----
+            if ($id('admin-achievement-grid')) renderAdminAchievements();
+            if ($id('admin-stock-grid')) renderAdminStockGrid();
+
+            // ---- 存档按钮（仅设置页存在） ----
+            if (hasSaveData() && $id('load-save-btn')) {
+                $id('load-save-btn').style.display = 'inline-block';
+            }
+
+            // ---- 日志 ----
+            hideLogPanel();
+
+            // ---- 规则（仅用于帮助） ----
+            updateGameRulesDisplay();
+
+            // ---- 管理员默认值（仅设置页有输入框时写入，缺失则跳过） ----
+            const setValIf = (id, v) => { const el = $id(id); if (el) el.value = v; };
+            setValIf('admin-banner-duration', BANNER_DURATION);
+            setValIf('admin-ai-think-min', AI_THINK_MIN);
+            setValIf('admin-ai-think-max', AI_THINK_MAX);
+            setValIf('admin-chart-type', CHART_TYPE);
+            setValIf('admin-darkhorse-multiplier', DARK_HORSE_MULTIPLIER);
+            setValIf('admin-darkhorse-prob', DARK_HORSE_PROB);
+            setValIf('admin-share-price', INIT_SHARE_PRICE);
+            // v9.1: 破产设置默认值
+            setValIf('admin-bankruptcy-threshold', BANKRUPTCY_THRESHOLD);
+            setValIf('admin-bankruptcy-fund', BANKRUPTCY_FUND);
+
+            // ---- 获取按钮引用（缺失时返回 null，下方按存在性绑定） ----
+            closeMarketBtn = $id('close-market-btn');
+            newGameBtn = $id('new-game-btn');
+            startGameBtn = $id('start-game-btn');
+            loadSaveBtn = $id('load-save-btn');
+            saveGameBtn = $id('save-game-btn');
+            restartBtn = $id('restart-btn');
+            helpBtn = $id('help-btn');
+            helpBtnSetup = $id('help-btn-setup');
+            helpCloseBtn = $id('help-close-btn');
+            helpCopyBtn = $id('help-copy-btn');
+            toggleLogsBtn = $id('toggle-logs');
+            togglePanelBtn = $id('toggle-panel-btn');
+            exportCodeBtn = $id('export-code-btn');
+            importCodeBtn = $id('import-code-btn');
+            codeCloseBtn = $id('code-close-btn');
+            codeCopyBtn = $id('code-copy-btn');
+            codeShareBtn = $id('code-share-btn');
+            codeImportConfirm = $id('code-import-confirm-btn');
+            achievementCloseBtn = $id('achievement-close-btn');
+            endGameBtn = $id('end-game-btn');
+
+            // v10.4: 联机模式下不支持存档码/保存存档（不影响进程的功能才保留）
+            if (window.GAME_MODE === 'master' || window.GAME_MODE === 'player') {
+                ['save-game-btn', 'export-code-btn', 'import-code-btn'].forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el) { el.style.display = 'none'; el.disabled = true; }
+                });
+            }
+
+            // ---- 单机/联机开始按钮补绑定（兼容所有页面，避免按钮点不动） ----
+            // index.html 已有 inline onclick，此处仅在未绑定时补充
+            const mpLocalBtn = document.getElementById('mp-local-btn');
+            const mpOnlineBtn = document.getElementById('mp-online-btn');
+            if (mpLocalBtn && !mpLocalBtn.getAttribute('onclick') && !mpLocalBtn.onclick) {
+                mpLocalBtn.onclick = function() {
+                    if (window.lobbyStartLocal) {
+                        window.lobbyStartLocal();
+                    } else {
+                        try {
+                            const read = function(id) { const e = document.getElementById(id); return e ? e.value : null; };
+                            localStorage.setItem('xfw_local_config', JSON.stringify({
+                                humanPlayers: parseInt(read('human-players')) || 1,
+                                aiPlayers: parseInt(read('ai-players')) || 1,
+                                totalRounds: parseInt(read('total-rounds')) || 60,
+                                admin: null
+                            }));
+                        } catch(e) {}
+                        location.href = 'game_local.html';
+                    }
+                };
+            }
+            if (mpOnlineBtn && !mpOnlineBtn.getAttribute('onclick') && !mpOnlineBtn.onclick) {
+                mpOnlineBtn.onclick = function() {
+                    if (window.lobbyStartOnline) {
+                        window.lobbyStartOnline();
+                    } else {
+                        // 单机页未加载联机模块，跳回大厅页
+                        location.href = 'index.html';
+                    }
+                };
+            }
+
+            // ---- 绑定事件（仅绑定存在的按钮，缺失的页面自动跳过） ----
+            if (closeMarketBtn) closeMarketBtn.addEventListener('click', closeMarket);
+            if (newGameBtn) newGameBtn.addEventListener('click', backToSetup);
+            if (startGameBtn) startGameBtn.addEventListener('click', () => initGame(false));
+            if (loadSaveBtn) loadSaveBtn.addEventListener('click', () => initGame(true));
+            if (saveGameBtn) saveGameBtn.addEventListener('click', () => saveGame(false));
+            if (restartBtn) restartBtn.addEventListener('click', backToSetup);
+            if (endGameBtn) endGameBtn.addEventListener('click', directEndGame);
+
+            if (helpBtn) helpBtn.addEventListener('click', () => {
+                document.getElementById('help-modal').style.display = 'flex';
+                updateGameRulesDisplay();
+            });
+            if (helpBtnSetup) helpBtnSetup.addEventListener('click', () => {
+                document.getElementById('help-modal').style.display = 'flex';
+                updateGameRulesDisplay();
+            });
+            if (helpCloseBtn) helpCloseBtn.addEventListener('click', () => document.getElementById('help-modal').style.display = 'none');
+
+            if (helpCopyBtn) helpCopyBtn.addEventListener('click', function() {
+                let content = document.getElementById('help-content-body');
+                let text = content.textContent;
+                navigator.clipboard.writeText(text).then(() => {
+                    showBanner('帮助内容已复制到剪贴板', 'success', null, '📋 复制');
+                }).catch(() => {
+                    let range = document.createRange();
+                    range.selectNodeContents(content);
+                    let sel = window.getSelection();
+                    sel.removeAllRanges();
+                    sel.addRange(range);
+                    document.execCommand('copy');
+                    showBanner('帮助内容已复制到剪贴板', 'success', null, '📋 复制');
+                });
+            });
+
+            if (toggleLogsBtn) toggleLogsBtn.addEventListener('click', () => {
+                allLogsExpanded = !allLogsExpanded;
+                rebuildLogs();
+            });
+            if (togglePanelBtn) togglePanelBtn.addEventListener('click', toggleLogPanel);
+            if (exportCodeBtn) exportCodeBtn.addEventListener('click', exportCode);
+            if (importCodeBtn) importCodeBtn.addEventListener('click', importCode);
+            if (codeCloseBtn) codeCloseBtn.addEventListener('click', () => document.getElementById('code-modal').style.display = 'none');
+            if (codeShareBtn) codeShareBtn.addEventListener('click', () => {
+                let ta = document.getElementById('code-textarea');
+                if (window.CapBridge && window.CapBridge.isApp) {
+                    window.CapBridge.share('小富翁存档码', ta.value);
+                } else {
+                    ta.select(); document.execCommand('copy');
+                    showBanner('已复制到剪贴板', 'success', null, '📋 复制');
+                }
+            });
+            if (codeCopyBtn) codeCopyBtn.addEventListener('click', () => {
+                let ta = document.getElementById('code-textarea');
+                ta.select();
+                document.execCommand('copy');
+                showBanner('已复制到剪贴板', 'success', null, '📋 复制');
+            });
+            if (codeImportConfirm) codeImportConfirm.addEventListener('click', doImportCode);
+            if (achievementCloseBtn) achievementCloseBtn.addEventListener('click', () => {
+                document.getElementById('achievement-modal').classList.remove('active');
+                document.body.classList.remove('modal-open');
+            });
+
+            const achievementModalEl = document.getElementById('achievement-modal');
+            if (achievementModalEl) achievementModalEl.addEventListener('click', function(e) {
+                if (e.target === this) {
+                    this.classList.remove('active');
+                    document.body.classList.remove('modal-open');
+                }
+            });
+
+            // ---- 外接AI ----
+            // v10.1: 联机页已删除「添加外接AI」按钮，需判空
+            if ($id('add-external-ai-btn')) {
+                $id('add-external-ai-btn').addEventListener('click', addExternalAI);
+            }
+
+            const eaiPanelCloseEl = document.getElementById('eai-panel-close');
+            if (eaiPanelCloseEl) eaiPanelCloseEl.addEventListener('click', closeExternalPanel);
+            const eaiPanelCloseBtnEl = document.getElementById('eai-panel-close-btn');
+            if (eaiPanelCloseBtnEl) eaiPanelCloseBtnEl.addEventListener('click', closeExternalPanel);
+
+            document.querySelectorAll('#eai-overlay .eai-tabs button').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    let tab = this.dataset.tab;
+                    switchEAITab(tab);
+                });
+            });
+
+            const eaiCopyPromptEl = document.getElementById('eai-copy-prompt');
+            if (eaiCopyPromptEl) eaiCopyPromptEl.addEventListener('click', function() {
+                let box = document.getElementById('eai-prompt-box');
+                let text = box.textContent;
+                navigator.clipboard.writeText(text).then(() => {
+                    showBanner('指令已复制到剪贴板', 'success', null, '📋 复制');
+                }).catch(() => {
+                    let range = document.createRange();
+                    range.selectNodeContents(box);
+                    let sel = window.getSelection();
+                    sel.removeAllRanges();
+                    sel.addRange(range);
+                    document.execCommand('copy');
+                    showBanner('指令已复制到剪贴板', 'success', null, '📋 复制');
+                });
+            });
+
+            const eaiExecuteResponseEl = document.getElementById('eai-execute-response');
+            if (eaiExecuteResponseEl) eaiExecuteResponseEl.addEventListener('click', function() {
+                let text = document.getElementById('eai-response-text').value.trim();
+                if (!text) {
+                    showBanner('请粘贴外部AI的回复内容', 'warning', null, '⚠️ 操作失败');
+                    return;
+                }
+                let pid = parseInt(document.getElementById('eai-overlay').dataset.currentPlayerId);
+                if (isNaN(pid)) {
+                    showBanner('未找到外接AI', 'error', null, '❌ 错误');
+                    return;
+                }
+                let parsed = parseExternalAIResponse(text);
+                if (parsed.error) {
+                    showBanner('解析失败：' + parsed.error, 'error', null, '❌ 解析错误');
+                    return;
+                }
+                let result = executeExternalAIDecision(pid, parsed.actions);
+                if (result.success && result.errors && result.errors.length > 0) {
+                    document.getElementById('eai-response-text').value = '';
+                    closeExternalPanel();
+                    markPlayerDone(pid);
+                    checkAllDone();
+                } else if (result.success) {
+                    document.getElementById('eai-response-text').value = '';
+                    closeExternalPanel();
+                    markPlayerDone(pid);
+                    checkAllDone();
+                } else {
+                    showBanner('所有操作失败，请检查指令后重试', 'warning', null, '🌐 外接AI');
+                }
+            });
+
+            const eaiClearResponseEl = document.getElementById('eai-clear-response');
+            if (eaiClearResponseEl) eaiClearResponseEl.addEventListener('click', function() {
+                document.getElementById('eai-response-text').value = '';
+            });
+
+            // ---- 高级设置 ----
+            if ($id('admin-panel')) {
+                window.enableAdminSettings = function() {
+                    adminMode = true;
+                    $id('admin-panel').style.display = 'block';
+                    renderAdminAchievements();
+                    renderAdminStockGrid();
+                    setValIf('admin-init-money', INIT_PLAYER_MONEY);
+                    setValIf('admin-bank-money', INIT_BANK_MONEY);
+                    setValIf('admin-loot-threshold', LOOT_THRESHOLD);
+                    setValIf('admin-loot-ratio', LOOT_RATIO);
+                    setValIf('admin-volatility-scale', ADMIN_CONFIG.volatilityScale);
+                    setValIf('admin-lottery-win-scale', ADMIN_CONFIG.lotteryWinScale);
+                    setValIf('admin-algo-mode', ADMIN_CONFIG.algoMode || '标准');
+                    setValIf('admin-banner-duration', BANNER_DURATION);
+                    setValIf('admin-ai-think-min', AI_THINK_MIN);
+                    setValIf('admin-ai-think-max', AI_THINK_MAX);
+                    setValIf('admin-chart-type', CHART_TYPE);
+                    setValIf('admin-darkhorse-multiplier', DARK_HORSE_MULTIPLIER);
+                    setValIf('admin-darkhorse-prob', DARK_HORSE_PROB);
+                    setValIf('admin-share-price', INIT_SHARE_PRICE);
+                    setValIf('admin-bankruptcy-threshold', BANKRUPTCY_THRESHOLD);
+                    setValIf('admin-bankruptcy-fund', BANKRUPTCY_FUND);
+                };
+            }
+
+            // ---- 管理员Tab切换 ----
+            document.querySelectorAll('.admin-tabs button').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    document.querySelectorAll('.admin-tabs button').forEach(b => b.classList.remove(
+                    'active'));
+                    this.classList.add('active');
+                    const tabId = this.dataset.tab;
+                    document.querySelectorAll('.admin-tab-content').forEach(el => el.classList.remove(
+                        'active'));
+                    document.getElementById(tabId).classList.add('active');
+                });
+            });
+
+            // ---- 应用设置按钮 ----
+            const applyAdminBtnEl = document.getElementById('apply-admin-btn');
+            if (applyAdminBtnEl) applyAdminBtnEl.addEventListener('click', function() {
+                ADMIN_CONFIG.volatilityScale = parseFloat(document.getElementById('admin-volatility-scale')
+                    .value) || 1.0;
+                ADMIN_CONFIG.lotteryWinScale = parseFloat(document.getElementById('admin-lottery-win-scale')
+                    .value) || 1.0;
+                ADMIN_CONFIG.algoMode = document.getElementById('admin-algo-mode').value || '标准';
+                BANNER_DURATION = parseFloat(document.getElementById('admin-banner-duration').value) || 4;
+                const thinkMin = parseFloat(document.getElementById('admin-ai-think-min').value);
+                const thinkMax = parseFloat(document.getElementById('admin-ai-think-max').value);
+                if (!isNaN(thinkMin) && thinkMin > 0) AI_THINK_MIN = thinkMin;
+                if (!isNaN(thinkMax) && thinkMax > 0) AI_THINK_MAX = Math.max(thinkMax, AI_THINK_MIN + 0.5);
+
+                CHART_TYPE = document.getElementById('admin-chart-type').value || 'line';
+
+                // v9.1: 应用破产设置
+                const bThreshold = parseInt(document.getElementById('admin-bankruptcy-threshold').value);
+                if (!isNaN(bThreshold) && bThreshold >= 10) {
+                    BANKRUPTCY_THRESHOLD = bThreshold;
+                    ADMIN_CONFIG.bankruptcyThreshold = bThreshold;
+                }
+                const bFund = parseInt(document.getElementById('admin-bankruptcy-fund').value);
+                if (!isNaN(bFund) && bFund >= 100) {
+                    BANKRUPTCY_FUND = bFund;
+                    ADMIN_CONFIG.bankruptcyFund = bFund;
+                }
+
+                document.querySelectorAll('.ach-reward-input').forEach(inp => {
+                    const id = inp.dataset.id;
+                    const v = parseFloat(inp.value) || 0;
+                    if (id && v >= 0) achievementRewardRatios[id] = clamp(v / 100, 0, 1);
+                });
+
+                document.querySelectorAll('.stock-name-input').forEach(inp => {
+                    const key = inp.dataset.key;
+                    const val = inp.value.trim() || (key + '股');
+                    if (stocks[key]) stocks[key].name = val;
+                });
+                document.querySelectorAll('.stock-up-input').forEach(inp => {
+                    const key = inp.dataset.key;
+                    let val = parseFloat(inp.value) || 0;
+                    val = clamp(val, 0, 200) / 100;
+                    if (stocks[key]) stocks[key].maxUp = val;
+                    if (key === 'A') ADMIN_CONFIG.aMaxUp = val;
+                    else if (key === 'B') ADMIN_CONFIG.bMaxUp = val;
+                    else if (key === 'C') ADMIN_CONFIG.cMaxUp = val;
+                    else if (key === 'D') ADMIN_CONFIG.dMaxUp = val;
+                });
+                document.querySelectorAll('.stock-down-input').forEach(inp => {
+                    const key = inp.dataset.key;
+                    let val = parseFloat(inp.value) || 0;
+                    val = clamp(val, -90, 0) / 100;
+                    if (stocks[key]) stocks[key].maxDown = val;
+                    if (key === 'B') ADMIN_CONFIG.bMaxDown = val;
+                    else if (key === 'C') ADMIN_CONFIG.cMaxDown = val;
+                    else if (key === 'D') ADMIN_CONFIG.dMaxDown = val;
+                });
+
+                stocks.A.maxUp = ADMIN_CONFIG.aMaxUp;
+                stocks.A.maxDown = 0;
+                stocks.B.maxDown = ADMIN_CONFIG.bMaxDown;
+                stocks.B.maxUp = ADMIN_CONFIG.bMaxUp;
+                stocks.C.maxDown = ADMIN_CONFIG.cMaxDown;
+                stocks.C.maxUp = ADMIN_CONFIG.cMaxUp;
+                stocks.D.maxDown = ADMIN_CONFIG.dMaxDown;
+                stocks.D.maxUp = ADMIN_CONFIG.dMaxUp;
+
+                const dhMult = parseFloat(document.getElementById('admin-darkhorse-multiplier').value);
+                if (!isNaN(dhMult) && dhMult >= 1.2) DARK_HORSE_MULTIPLIER = dhMult;
+                const dhProb = parseFloat(document.getElementById('admin-darkhorse-prob').value);
+                if (!isNaN(dhProb) && dhProb >= 0.05 && dhProb <= 1.0) DARK_HORSE_PROB = dhProb;
+
+                const sharePrice = parseFloat(document.getElementById('admin-share-price').value);
+                if (!isNaN(sharePrice) && sharePrice >= 10) INIT_SHARE_PRICE = sharePrice;
+
+                if (players.length > 0 && gameActive) {
+                    updateStockStatus();
+                }
+                initLotteries();
+                updateGameRulesDisplay();
+                if (stocksChart) {
+                    stocksChart.config.type = CHART_TYPE;
+                    stocksChart.update();
+                }
+                showBanner('高级参数已保存，规则已同步更新', 'success', null, '✅ 应用设置');
+            });
+            // ---- 键盘快捷键 ----
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape') {
+                    let overlay = document.getElementById('eai-overlay');
+                    if (overlay.classList.contains('active')) {
+                        closeExternalPanel();
+                    }
+                    let modals = document.querySelectorAll(
+                        '.modal-overlay.active, .results-modal, .event-modal, .help-modal, .code-modal'
+                        );
+                    modals.forEach(m => {
+                        if (m.style.display !== 'none' && m.style.display !== '') {
+                            if (m.id === 'code-modal') return;
+                            m.classList.remove('active');
+                            m.style.display = 'none';
+                            document.body.classList.remove('modal-open');
+                        }
+                    });
+                    if (document.getElementById('achievement-modal').classList.contains('active')) {
+                        document.getElementById('achievement-modal').classList.remove('active');
+                        document.body.classList.remove('modal-open');
+                    }
+                }
+            });
+
+            // ---- 模态框外部点击关闭 ----
+            document.querySelectorAll('.results-modal, .event-modal, .help-modal, .code-modal').forEach(el => {
+                el.addEventListener('click', function(e) {
+                    if (e.target === this) {
+                        if (this.id === 'code-modal') return;
+                        this.style.display = 'none';
+                        document.body.classList.remove('modal-open');
+                    }
+                });
+            });
+
+            // ---- 日志面板显示按钮 ----
+            document.getElementById('show-log-btn').addEventListener('click', function() {
+                let panel = document.getElementById('game-history');
+                panel.classList.remove('hidden');
+                panel.classList.remove('collapsed');
+                logPanelVisible = true;
+                this.style.display = 'none';
+                if (typeof window.placeNetStatusBar === 'function') window.placeNetStatusBar();
+            });
+
+            // ---- 标题点击 → Star 引导浮窗（自定义 DOM 广告） ----
+            const starTitleEl = $id('main-title');
+            if (starTitleEl) {
+                starTitleEl.style.cursor = 'pointer';
+                starTitleEl.title = '⭐ 支持一下';
+                starTitleEl.addEventListener('click', function() {
+                    const oldPop = $id('star-popup');
+                    if (oldPop) oldPop.remove();
+                    const pop = document.createElement('div');
+                    pop.id = 'star-popup';
+                    pop.className = 'star-popup';
+                    pop.innerHTML = '<a href="https://github.com/jdprs/xfw-net" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:8px;">⭐ 随手点个Star，支持一下<span class="sp-close" id="sp-close">×</span></a>';
+                    const rect = this.getBoundingClientRect();
+                    pop.style.position = 'fixed';
+                    pop.style.top = (rect.bottom + 10) + 'px';
+                    pop.style.left = (rect.left + rect.width / 2) + 'px';
+                    pop.style.transform = 'translateX(-50%)';
+                    document.body.appendChild(pop);
+                    let dismissed = false;
+                    const dismiss = () => {
+                        if (dismissed) return;
+                        dismissed = true;
+                        const el = $id('star-popup');
+                        if (el) el.remove();
+                        document.removeEventListener('click', outside);
+                    };
+                    const outside = (ev) => { if (ev.target !== starTitleEl && !pop.contains(ev.target)) dismiss(); };
+                    const closeBtn = pop.querySelector('#sp-close');
+                    if (closeBtn) closeBtn.addEventListener('click', function(ev) { ev.preventDefault(); ev.stopPropagation(); dismiss(); });
+                    setTimeout(dismiss, 6000);
+                    document.addEventListener('click', outside);
+                });
+            }
+
+            // ---- 底部「历史版本」→ 直接抓取 commit 信息（不跳转） ----
+            const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+            const historyVerEl = $id('history-version');
+            if (historyVerEl) {
+                historyVerEl.addEventListener('click', function() {
+                    let overlay = $id('commit-modal-overlay');
+                    if (overlay) overlay.remove();
+                    overlay = document.createElement('div');
+                    overlay.id = 'commit-modal-overlay';
+                    overlay.className = 'commit-modal-overlay';
+                    overlay.innerHTML = '<div class="commit-modal">' +
+                        '<div class="section-header"><div class="section-title">📜 历史版本（最近提交）</div>' +
+                        '<button class="btn btn-warning btn-sm" id="commit-close">关闭</button></div>' +
+                        '<div class="commit-list" id="commit-list">加载中…</div></div>';
+                    document.body.appendChild(overlay);
+                    const list = $id('commit-list');
+                    const closeBtn = $id('commit-close');
+                    if (closeBtn) closeBtn.addEventListener('click', () => overlay.remove());
+                    overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+                    fetch('https://api.github.com/repos/jdprs/xfw-net/commits?per_page=20')
+                        .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+                        .then(data => {
+                            if (!Array.isArray(data) || data.length === 0) { list.textContent = '暂无提交记录'; return; }
+                            list.innerHTML = data.map(c => {
+                                const msg = ((c.commit && c.commit.message) || '').split('\n')[0] || '';
+                                const dt = c.commit && c.commit.author && c.commit.author.date;
+                                const date = dt ? new Date(dt).toLocaleString('zh-CN', { hour12: false }) : '';
+                                const sha = c.sha ? c.sha.slice(0, 7) : '';
+                                const author = c.commit && c.commit.author ? c.commit.author.name : '';
+                                return '<div class="commit-item"><span class="ci-sha">' + esc(sha) + '</span>' +
+                                    '<span class="ci-msg">' + esc(msg) + '</span>' +
+                                    '<span class="ci-meta">' + esc(author) + ' · ' + esc(date) + '</span></div>';
+                            }).join('');
+                        })
+                        .catch(err => { list.textContent = '获取失败：' + err.message; });
+                });
+            }
+
+            // ---- 控制台提示 ----
+            console.log('✅ 小富翁股票投资游戏 v9.3 增强版 已加载完成');
+            console.log('🔧 v9.3：掠夺模式封股票跑路机制；AI即将破产时撤资保命；补全存档/预测拦截');
+        };
+
+        // ================================================================
