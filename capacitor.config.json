@@ -9,6 +9,7 @@
   "plugins": {
     "Haptics": {},
     "Clipboard": {},
-    "Share": {}
+    "Share": {},
+    "Browser": {}
   }
 }
